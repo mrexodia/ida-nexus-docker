@@ -1,0 +1,16 @@
+runs/
+models.json
+.pi-sessions/
+.ida-nexus/
+__pycache__/
+*.pyc
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.exe
+*.bin
+*.dll
+*.sys

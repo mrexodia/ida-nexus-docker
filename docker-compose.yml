@@ -1,0 +1,17 @@
+name: ida-nexus-docker
+
+services:
+  runner:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: ${IDA_BASE_IMAGE:-ida:9.4}
+    image: ${IDA_RUNNER_IMAGE:-ida-nexus-runner:9.4}
+    environment:
+      RUNNER_PROVIDER: ${IDA_RUNNER_PROVIDER:-}
+      RUNNER_MODEL: ${IDA_RUNNER_MODEL:-}
+      RUNNER_THINKING: ${IDA_RUNNER_THINKING:-off}
+    volumes:
+      - ${IDA_RUNNER_MODELS_FILE:-./models.json}:/config/models.json:ro
+    extra_hosts:
+      - host.docker.internal:host-gateway

@@ -1,0 +1,1 @@
+Can you unpack {SAMPLE1} with IDA Nexus and use the IDA Domain API?

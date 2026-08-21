@@ -1,0 +1,1 @@
+Now can you resolve the APIs, deobfuscate the strings and recover the ransomware configuration in the unpacked version?
