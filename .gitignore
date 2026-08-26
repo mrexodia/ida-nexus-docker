@@ -1,5 +1,7 @@
 runs/
-models.json
+models*.json
+!models.example.json
+.pi/auth.json
 .pi-sessions/
 .ida-nexus/
 __pycache__/

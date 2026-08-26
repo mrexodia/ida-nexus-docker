@@ -26,6 +26,11 @@
           "input": ["text"],
           "contextWindow": 1048576,
           "maxTokens": 32768,
+          "samplingParams": {
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 64
+          },
           "cost": {
             "input": 0,
             "output": 0,

@@ -1,7 +1,9 @@
 .git
 .gitignore
 runs
-models.json
+models*.json
+!models.example.json
+.pi
 .pi-sessions
 .ida-nexus
 __pycache__

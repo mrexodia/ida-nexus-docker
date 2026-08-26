@@ -9,24 +9,59 @@ trail.
 The image contains tools only. Samples, prompts, model settings, and credentials
 are never baked into it.
 
-## Configure models
+## Configure Pi
 
-Copy the example Pi model catalog and edit it for your provider:
+Repository-local Pi configuration lives under `.pi/`:
 
-```bash
-cp models.example.json models.json
+```text
+.pi/
+  models.json
+  auth.json
+  settings.json
+  extensions/
+  skills/
+  prompts/
 ```
 
-`models.json` is ignored by Git and Docker. Put the provider URL, API key, model
-limits, and compatibility settings directly in that file. The launcher mounts
-the selected file read-only and the entrypoint copies it to Pi's configuration
-directory inside the disposable container.
+Create the model catalog from the example:
+
+```bash
+cp models.example.json .pi/models.json
+```
+
+`.pi/models.json` and `.pi/auth.json` are ignored by Git, and the entire `.pi`
+directory is excluded from the Docker build context. Provider credentials may
+remain as `apiKey` values in `models.json`, but the recommended layout stores
+them in `.pi/auth.json`:
+
+```json
+{
+  "provider-name": { "type": "api_key", "key": "..." }
+}
+```
+
+At runtime the launcher mounts `.pi` read-only. The entrypoint copies
+`auth.json`, merged `settings.json`, and the `extensions/`, `skills/`, and
+`prompts/` trees into Pi's disposable global configuration directory. Global
+placement makes these resources available to print-mode sessions even though
+the hostile workspace remains untrusted. The image's IDA Nexus package setting
+is preserved when repository settings are merged.
+
+Only files that exist are imported. Use `--pi-config-dir path` or
+`IDA_RUNNER_PI_CONFIG_DIR` to select another directory. Pi extensions execute
+arbitrary code inside the container, and skills can direct model behavior, so
+review both before unattended runs. `.pi/prompts/` contains Pi slash-command
+prompt templates; the top-level `prompts/` directory still contains ordered
+analysis stages supplied with `--prompt`.
 
 By default, the first Pi provider and its first model are selected. Override
 that selection with `--provider` and `--model`, or with
-`IDA_RUNNER_PROVIDER` and `IDA_RUNNER_MODEL`. Use
+`IDA_RUNNER_PROVIDER` and `IDA_RUNNER_MODEL`. Model selection prefers
+`.pi/models.json`, then the legacy root `models.json`. Use
 `--models path/to/models.json` or `IDA_RUNNER_MODELS_FILE` to select another
-catalog.
+catalog. The example applies `temperature=1.0`, `top_p=0.95`, and `top_k=64`
+through Pi's model-level `samplingParams`; OpenAI-compatible APIs merge supported
+values verbatim into every request.
 
 ## Build
 
@@ -69,7 +104,25 @@ python analyze.py \
 each receives a separate Pi session. They communicate through the persistent
 workspace and IDB rather than an ever-growing model transcript. After each
 prompt, the harness extracts its final textual assistant response to
-`workspace/01-result.md`, `workspace/02-result.md`, and so on.
+`workspace/01-result.md`, `workspace/02-result.md`, and so on. At the end of the
+console output it prints each session's total reported cost and input, output,
+and cache token usage, followed by aggregate cost and token totals for the run.
+
+By default, each stage after the first is told to read only the immediately
+preceding `result.md` as untrusted prior-stage notes and to verify its important
+claims against the IDB and generated artifacts. The result contents are not
+inserted into the prompt, and the full result chain is not injected. Disable
+this handoff with `--no-inject-prior-stage`; enable it explicitly with
+`--inject-prior-stage`.
+
+Reliable execution is opt-in with `--reliable-execution`. Pi then receives an
+appended system contract that separates tool-call turns from explanatory turns,
+forbids printing tool-call JSON as text, prohibits unsupported completion
+claims, and requires artifact/state verification before the final answer. The
+stage is rejected if its JSONL contains no successful tool use or its final
+response starts with an unexecuted pseudo-tool call, preventing that response
+from being passed to the next stage. This catches obvious false-success modes
+but cannot prove that a model's analysis is correct.
 
 Prompt templates may use `{SAMPLE1}`, `{SAMPLE2}`, and so on. The placeholders
 are one-indexed in `--sample` order and are replaced in the mounted prompt copies
@@ -86,9 +139,10 @@ python analyze.py ... \
   --thinking high
 ```
 
-Provider URLs and credentials come exclusively from the selected Pi model
-catalog; they are not passed through environment variables or command-line
-options. `--thinking` accepts `off`, `minimal`, `low`, `medium`, `high`, `xhigh`,
+Provider URLs come from the selected Pi model catalog. Credentials resolve
+through Pi's normal order, including `.pi/auth.json` and model-catalog keys;
+they are not passed through runner command-line options. `--thinking` accepts
+`off`, `minimal`, `low`, `medium`, `high`, `xhigh`,
 or `max` and defaults to `off`; `IDA_RUNNER_THINKING` sets a different runner
 default. The selected model must declare `"reasoning": true`, and its optional
 `thinkingLevelMap` in `models.json` controls which levels Pi supports and how
@@ -114,14 +168,18 @@ runs/<timestamp>-<name>-<id>/
       spawn/
 ```
 
-The manifest records the model-catalog hash and both source and rendered prompt
-hashes, but not the model catalog contents. The launcher validates that
-`ida-nexus-logs.zip` contains at least one semantic IDA session and its linked
-Pi transcript. The ZIP has its own TOC, source-path map, sizes, and SHA-256
-hashes. Its SHA-256 is also recorded in the run manifest.
+The manifest records hashes and sizes for imported Pi config/resources, the
+model catalog, and both source and rendered prompts, but not configuration file
+contents. For successful runs, the launcher
+validates that `ida-nexus-logs.zip` contains at least one semantic IDA session
+and its linked Pi transcript. The ZIP has its own TOC, source-path map, sizes,
+and SHA-256 hashes. Its SHA-256 is also recorded in the run manifest.
 
-If a prompt fails, the container stops subsequent stages but still attempts to
-archive all partial logs.
+If Pi exits unsuccessfully or reliable-execution validation rejects a session,
+the container skips final-response extraction, stops subsequent stages, and
+still attempts to archive all partial logs. A partial archive may contain no
+linked Pi transcript; the launcher records its available contents without
+replacing the original container failure with an archive-validation error.
 
 ## Isolation model
 
@@ -131,12 +189,15 @@ Only the following per-run inputs are exposed to the container:
 - rendered `prompts/` → `/prompts` (read-only)
 - `state/` → `/state` (read/write)
 - the selected `models.json` → `/config/models.json` (read-only)
+- `.pi/` (when present) → `/config/pi` (read-only)
 
-Original sample paths, this source tree, the user profile, unrelated
+Original sample paths, the rest of this source tree, the user profile, unrelated
 credentials, and the Docker socket are not mounted. Samples are copied rather
 than bind-mounted. The container drops Linux capabilities, enables
 `no-new-privileges`, and uses normal Docker bridge networking. Pi ignores
-workspace context files and project-local extensions for non-interactive jobs.
+workspace context files and project-local extensions for non-interactive jobs;
+explicit repository `.pi` resources are copied into the container-global Pi
+configuration instead.
 
 Network access is still required for the configured model endpoint. Treat all
 samples as hostile and use static-analysis prompts; container isolation is not

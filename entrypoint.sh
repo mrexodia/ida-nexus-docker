@@ -6,6 +6,73 @@ mkdir -p \
     "$PI_CODING_AGENT_DIR" \
     "$PI_CODING_AGENT_SESSION_DIR"
 
+# Import optional repository-local Pi resources into the disposable global
+# config directory. Global placement makes them available in non-interactive
+# mode without trusting project-local files in the hostile workspace.
+repository_pi_config="${RUNNER_PI_CONFIG_DIR:-/config/pi}"
+if [[ -d "$repository_pi_config" ]]; then
+    for resource in extensions skills prompts; do
+        source_dir="$repository_pi_config/$resource"
+        if [[ -d "$source_dir" ]]; then
+            destination_dir="$PI_CODING_AGENT_DIR/$resource"
+            rm -rf "$destination_dir"
+            mkdir -p "$destination_dir"
+            cp -a "$source_dir/." "$destination_dir/"
+        fi
+    done
+
+    if [[ -f "$repository_pi_config/auth.json" ]]; then
+        install -m 600 "$repository_pi_config/auth.json" "$PI_CODING_AGENT_DIR/auth.json"
+    fi
+
+    # Preserve the IDA Nexus package installed in the image while applying all
+    # repository settings over the image defaults.
+    if [[ -f "$repository_pi_config/settings.json" ]]; then
+        python3 - "$PI_CODING_AGENT_DIR/settings.json" "$repository_pi_config/settings.json" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+installed = Path(sys.argv[1])
+incoming = Path(sys.argv[2])
+base = json.loads(installed.read_text(encoding="utf-8")) if installed.is_file() else {}
+override = json.loads(incoming.read_text(encoding="utf-8"))
+if not isinstance(base, dict) or not isinstance(override, dict):
+    raise SystemExit("Pi settings files must contain JSON objects")
+
+
+def merge(left, right):
+    result = dict(left)
+    for key, value in right.items():
+        if isinstance(result.get(key), dict) and isinstance(value, dict):
+            result[key] = merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+merged = merge(base, override)
+base_packages = base.get("packages") if isinstance(base.get("packages"), list) else []
+override_packages = override.get("packages") if isinstance(override.get("packages"), list) else []
+if base_packages:
+    packages = []
+    seen = set()
+    for package in [*base_packages, *override_packages]:
+        identity = json.dumps(package, sort_keys=True, separators=(",", ":"))
+        if identity not in seen:
+            seen.add(identity)
+            packages.append(package)
+    merged["packages"] = packages
+
+temporary = installed.with_suffix(".json.tmp")
+temporary.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+os.chmod(temporary, 0o600)
+os.replace(temporary, installed)
+PY
+    fi
+fi
+
 # The host supplies the complete Pi model catalog. Copy the read-only mount
 # into Pi's config directory for this disposable container.
 models_file="${RUNNER_MODELS_FILE:-/config/models.json}"

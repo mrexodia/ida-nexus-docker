@@ -12,6 +12,7 @@ services:
       RUNNER_MODEL: ${IDA_RUNNER_MODEL:-}
       RUNNER_THINKING: ${IDA_RUNNER_THINKING:-off}
     volumes:
-      - ${IDA_RUNNER_MODELS_FILE:-./models.json}:/config/models.json:ro
+      - ${IDA_RUNNER_MODELS_FILE:-./.pi/models.json}:/config/models.json:ro
+      - ${IDA_RUNNER_PI_CONFIG_DIR:-./.pi}:/config/pi:ro
     extra_hosts:
       - host.docker.internal:host-gateway
