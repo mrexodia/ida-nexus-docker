@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from decimal import Decimal
@@ -246,6 +247,11 @@ def main() -> int:
         action="store_true",
         help="require successful tool use and reject pseudo-tool-call text",
     )
+    parser.add_argument(
+        "--export-html",
+        action="store_true",
+        help="also export the session as HTML next to the JSONL file via pi --export",
+    )
     args = parser.parse_args()
 
     if args.usage_report:
@@ -266,6 +272,26 @@ def main() -> int:
     output = args.output or session.with_suffix(".md")
     write_atomic(output, extract_final_response(session))
     print(f"saved final response from {session} to {output}")
+
+    if args.export_html:
+        export_path = session.with_suffix(".html")
+        try:
+            subprocess.run(
+                ["pi", "--export", str(session), str(export_path)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            print(f"exported session HTML to {export_path}")
+        except FileNotFoundError:
+            print("warning: pi not found in PATH; skipping HTML export", file=sys.stderr)
+        except subprocess.CalledProcessError as exc:
+            print(
+                f"warning: pi --export failed with status {exc.returncode}: "
+                f"{exc.stderr.strip()}",
+                file=sys.stderr,
+            )
+
     return 0
 
 

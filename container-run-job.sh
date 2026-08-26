@@ -48,7 +48,7 @@ for prompt in "${prompts[@]}"; do
     fi
 
     result_path="$(printf '/workspace/%02d-result.md' "$stage")"
-    extraction_args=()
+    extraction_args=(--export-html)
     if [[ "$reliable_execution" == "true" ]]; then
         extraction_args+=(--validate-execution)
     fi
