@@ -28,9 +28,10 @@ status=0
 stage=0
 for prompt in "${prompts[@]}"; do
     ((stage += 1))
-    stage_name="$(printf '%s-%03d-%s' "$run_id" "$stage" "$(basename "$prompt")")"
-    echo "=== stage $stage/${#prompts[@]}: $(basename "$prompt") ==="
-    pi \
+    prompt_name="$(basename "$prompt")"
+    stage_name="$(printf '%s-%03d-%s' "$run_id" "$stage" "$prompt_name")"
+    echo "=== stage $stage/${#prompts[@]}: $prompt_name ==="
+    IDA_NEXUS_ID="$prompt_name" pi \
         "${pi_system_args[@]}" \
         --provider "$RUNNER_PROVIDER" \
         --model "$RUNNER_MODEL" \

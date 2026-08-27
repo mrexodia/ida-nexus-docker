@@ -1,1 +1,1 @@
-Can you unpack {SAMPLE1} with IDA Nexus and use the IDA Domain API?
+Unpack {SAMPLE1} with using the IDA MCP and Domain API. Make sure to produce an unpacked/decrypted binary for the next analysis stage.

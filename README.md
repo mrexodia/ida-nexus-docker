@@ -94,13 +94,27 @@ The HCLI documentation has an example [IDA Pro Docker Container](https://github.
 ```bash
 python analyze.py \
   --name darkside \
-  --sample e51e4c372edf2bbe476a4b7630225c1875c5ccea2ed55b418bd793c54ce9a84d.exe \
+  --sample samples/e51e4c372edf2bbe476a4b7630225c1875c5ccea2ed55b418bd793c54ce9a84d \
   --prompt prompts/01-unpack.txt \
   --prompt prompts/02-recover-config.txt \
   --prompt prompts/03-markup.txt
 ```
 
-`--sample` and `--prompt` are repeatable. Prompts run in the order supplied and
+For an interactive, dependency-free launcher, run:
+
+```bash
+python wizard.py
+```
+
+The wizard scans `samples/` and `prompts/` recursively, supports ordered
+multi-selection with entries such as `1,3-5`, enumerates providers and models
+from `.pi/models.json`, and lets you select the thinking level and execution
+options. It uses only the Python standard library and works with ordinary
+Windows, macOS, and Linux terminals.
+
+`--sample` and `--prompt` are repeatable. Their order is significant: sample
+order controls `{SAMPLE1}`, `{SAMPLE2}`, and so on, while prompt order controls
+stage execution. Prompts run in the order supplied and
 each receives a separate Pi session. They communicate through the persistent
 workspace and IDB rather than an ever-growing model transcript. After each
 prompt, the harness extracts its final textual assistant response to
@@ -128,6 +142,24 @@ Prompt templates may use `{SAMPLE1}`, `{SAMPLE2}`, and so on. The placeholders
 are one-indexed in `--sample` order and are replaced in the mounted prompt copies
 with paths such as `/workspace/sample.exe`. A prompt that references a missing
 sample is rejected before the run starts.
+
+### Replay a run
+
+Point the launcher at an existing manifest to create a fresh run:
+
+```bash
+python analyze.py --manifest runs/<run-id>/manifest.json
+```
+
+Replay restores the run name, image, provider, model, thinking level, handoff
+setting, and reliable-execution setting. It copies the original sample bytes
+from the retained run workspace and reuses the already-rendered prompt copies,
+checking their recorded SHA-256 hashes first. This avoids accidentally replaying
+changed inputs or injecting the prior-stage handoff twice. The referenced run's
+`workspace/` and `prompts/` directories must therefore remain next to its
+manifest. The current model catalog and Pi configuration are mounted so that
+credentials and endpoint changes can take effect. A replay records its source
+manifest and run ID in the new manifest.
 
 Useful overrides:
 

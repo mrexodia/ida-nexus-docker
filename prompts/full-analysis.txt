@@ -1,1 +1,1 @@
-Can you fully analyze {SAMPLE1}, mark up as many function names and variable names as possible and write a full report?
+Fully analyze {SAMPLE1}, mark up as many function names and variable names as possible and write a full report

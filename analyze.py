@@ -149,6 +149,143 @@ def write_manifest(path: Path, manifest: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def replay_file(
+    candidates: list[Path], expected_sha256: str | None, label: str
+) -> Path:
+    seen: set[str] = set()
+    mismatches: list[Path] = []
+    for candidate in candidates:
+        candidate = candidate.expanduser().resolve()
+        key = os.path.normcase(str(candidate))
+        if key in seen:
+            continue
+        seen.add(key)
+        if not candidate.is_file():
+            continue
+        if expected_sha256 and sha256(candidate) != expected_sha256:
+            mismatches.append(candidate)
+            continue
+        return candidate
+
+    if mismatches:
+        locations = ", ".join(str(path) for path in mismatches)
+        raise SystemExit(f"{label} exists but its SHA-256 changed: {locations}")
+    raise SystemExit(f"cannot find {label} referenced by the replay manifest")
+
+
+def load_replay_manifest(path: Path) -> dict[str, Any]:
+    manifest = load_json_object(path, "replay manifest")
+    if manifest.get("schema") != 1:
+        raise SystemExit(f"unsupported replay manifest schema in {path}")
+
+    manifest_root = path.parent
+    recorded_paths = manifest.get("paths")
+    recorded_workspace = (
+        Path(recorded_paths["workspace"])
+        if isinstance(recorded_paths, dict)
+        and isinstance(recorded_paths.get("workspace"), str)
+        else manifest_root / "workspace"
+    )
+
+    sample_entries = manifest.get("samples")
+    if not isinstance(sample_entries, list) or not sample_entries:
+        raise SystemExit(f"replay manifest has no samples: {path}")
+    samples: list[Path] = []
+    for index, entry in enumerate(sample_entries, 1):
+        if not isinstance(entry, dict):
+            raise SystemExit(f"invalid sample {index} in replay manifest: {path}")
+        workspace_name = entry.get("workspace_name")
+        source = entry.get("source")
+        if not isinstance(workspace_name, str) or not workspace_name:
+            raise SystemExit(f"sample {index} has no workspace_name in {path}")
+        candidates = [manifest_root / "workspace" / workspace_name, recorded_workspace / workspace_name]
+        if isinstance(source, str):
+            candidates.append(Path(source))
+        candidates.append(PROJECT_ROOT / "samples" / workspace_name)
+        samples.append(replay_file(candidates, entry.get("sha256"), f"sample {index}"))
+
+    prompt_entries = manifest.get("prompts")
+    if not isinstance(prompt_entries, list) or not prompt_entries:
+        raise SystemExit(f"replay manifest has no prompts: {path}")
+    prompts: list[dict[str, Any]] = []
+    for index, entry in enumerate(prompt_entries, 1):
+        if not isinstance(entry, dict):
+            raise SystemExit(f"invalid prompt {index} in replay manifest: {path}")
+        mounted_name = entry.get("mounted_name")
+        if not isinstance(mounted_name, str) or not mounted_name:
+            raise SystemExit(f"prompt {index} has no mounted_name in {path}")
+        rendered = replay_file(
+            [manifest_root / "prompts" / mounted_name],
+            entry.get("sha256"),
+            f"rendered prompt {index}",
+        )
+        try:
+            rendered_text = rendered.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as error:
+            raise SystemExit(f"cannot read replay prompt as UTF-8 {rendered}: {error}") from error
+        prompts.append(
+            {
+                "source": rendered,
+                "rendered": rendered_text,
+                "substitutions": entry.get("substitutions") or {},
+                "prior_stage_result": entry.get("prior_stage_result"),
+                "original_source": entry.get("original_source", entry.get("source")),
+                "replayed": True,
+            }
+        )
+
+    models_entry = manifest.get("models")
+    models_source = models_entry.get("source") if isinstance(models_entry, dict) else None
+    model_candidates = []
+    if isinstance(models_source, str):
+        model_candidates.append(Path(models_source))
+    model_candidates.extend([DEFAULT_PI_CONFIG_DIR / "models.json", LEGACY_MODELS_FILE])
+    models_file = replay_file(model_candidates, None, "models configuration")
+
+    pi_entry = manifest.get("pi_config")
+    pi_source = pi_entry.get("source") if isinstance(pi_entry, dict) else None
+    pi_config_dir = Path(pi_source) if isinstance(pi_source, str) else DEFAULT_PI_CONFIG_DIR
+    if not pi_config_dir.expanduser().is_dir() and DEFAULT_PI_CONFIG_DIR.is_dir():
+        pi_config_dir = DEFAULT_PI_CONFIG_DIR
+
+    required_strings = ("name", "image", "model")
+    missing = [name for name in required_strings if not isinstance(manifest.get(name), str)]
+    if missing:
+        raise SystemExit(f"replay manifest is missing: {', '.join(missing)}")
+
+    # Early schema-1 manifests predate these fields. Fill their runner defaults
+    # and infer the provider when the model ID is unambiguous in the catalog.
+    manifest = dict(manifest)
+    manifest.setdefault("base_image", DEFAULT_BASE_IMAGE)
+    manifest.setdefault("thinking", "off")
+    if not isinstance(manifest.get("provider"), str):
+        catalog = load_json_object(models_file, "models configuration")
+        providers = catalog.get("providers")
+        matching_providers = []
+        if isinstance(providers, dict):
+            for provider_name, provider_config in providers.items():
+                models = provider_config.get("models") if isinstance(provider_config, dict) else None
+                if isinstance(models, list) and any(
+                    isinstance(item, dict) and item.get("id") == manifest["model"]
+                    for item in models
+                ):
+                    matching_providers.append(provider_name)
+        if len(matching_providers) != 1:
+            raise SystemExit(
+                f"replay manifest has no provider and model {manifest['model']!r} "
+                "does not identify exactly one current provider"
+            )
+        manifest["provider"] = matching_providers[0]
+
+    return {
+        "manifest": manifest,
+        "samples": samples,
+        "prompts": prompts,
+        "models_file": models_file,
+        "pi_config_dir": pi_config_dir,
+    }
+
+
 def run_streaming(
     command: list[str], log_path: Path, *, env: dict[str, str] | None = None
 ) -> int:
@@ -224,8 +361,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Copy samples into a fresh workspace and analyze them in an isolated IDA container."
     )
-    parser.add_argument("--sample", action="append", required=True, help="sample file; repeatable")
-    parser.add_argument("--prompt", action="append", required=True, help="prompt file in execution order; repeatable")
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        help="create a fresh run from a previous run's manifest.json",
+    )
+    parser.add_argument("--sample", action="append", help="sample file; repeatable")
+    parser.add_argument("--prompt", action="append", help="prompt file in execution order; repeatable")
     parser.add_argument("--name", default="analysis", help="human-readable run name")
     parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
     parser.add_argument("--image", default=os.environ.get("IDA_RUNNER_IMAGE", DEFAULT_IMAGE))
@@ -277,8 +419,46 @@ def main() -> int:
     parser.add_argument("--build", action="store_true", help="build the image before running")
     args = parser.parse_args()
 
-    samples = [source_file(value, "sample") for value in args.sample]
-    prompts = [source_file(value, "prompt") for value in args.prompt]
+    replay: dict[str, Any] | None = None
+    replay_manifest_path: Path | None = None
+    if args.manifest is not None:
+        if args.sample or args.prompt:
+            parser.error("--manifest cannot be combined with --sample or --prompt")
+        replay_manifest_path = source_file(str(args.manifest), "replay manifest")
+        replay = load_replay_manifest(replay_manifest_path)
+        previous = replay["manifest"]
+        args.name = previous["name"]
+        args.image = previous["image"]
+        args.base_image = previous["base_image"]
+        args.provider = previous["provider"]
+        args.model = previous["model"]
+        args.thinking = previous["thinking"]
+        args.inject_prior_stage = bool(previous.get("inject_prior_stage", True))
+        args.reliable_execution = bool(previous.get("reliable_execution", False))
+        args.models = replay["models_file"]
+        args.pi_config_dir = replay["pi_config_dir"]
+        samples = replay["samples"]
+        rendered_prompts = replay["prompts"]
+    else:
+        if not args.sample:
+            parser.error("at least one --sample is required (or use --manifest)")
+        if not args.prompt:
+            parser.error("at least one --prompt is required (or use --manifest)")
+        samples = [source_file(value, "sample") for value in args.sample]
+        prompts = [source_file(value, "prompt") for value in args.prompt]
+        container_sample_paths = [f"/workspace/{sample.name}" for sample in samples]
+        rendered_prompts = [
+            {
+                "source": prompt,
+                "rendered": rendered,
+                "substitutions": substitutions,
+                "prior_stage_result": None,
+                "original_source": None,
+                "replayed": False,
+            }
+            for prompt in prompts
+            for rendered, substitutions in [render_prompt(prompt, container_sample_paths)]
+        ]
 
     requested_pi_config = args.pi_config_dir.expanduser().resolve()
     if requested_pi_config.exists() and not requested_pi_config.is_dir():
@@ -311,11 +491,6 @@ def main() -> int:
             raise SystemExit(f"duplicate sample basename: {sample.name}")
         sample_names.add(key)
 
-    container_sample_paths = [f"/workspace/{sample.name}" for sample in samples]
-    rendered_prompts = [
-        (prompt, *render_prompt(prompt, container_sample_paths)) for prompt in prompts
-    ]
-
     run_stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_id = f"{run_stamp}-{slug(args.name)}-{uuid.uuid4().hex[:6]}"
     run_root = args.runs_dir.expanduser().resolve() / run_id
@@ -336,9 +511,12 @@ def main() -> int:
         )
 
     copied_prompts = []
-    for index, (prompt, rendered, substitutions) in enumerate(rendered_prompts, 1):
-        previous_result = None
-        if args.inject_prior_stage and index > 1:
+    for index, prompt_input in enumerate(rendered_prompts, 1):
+        prompt = prompt_input["source"]
+        rendered = prompt_input["rendered"]
+        substitutions = prompt_input["substitutions"]
+        previous_result = prompt_input["prior_stage_result"]
+        if not prompt_input["replayed"] and args.inject_prior_stage and index > 1:
             previous_result = f"/workspace/{index - 1:02d}-result.md"
             rendered += (
                 "\n\nPrior-stage handoff: Read "
@@ -349,17 +527,18 @@ def main() -> int:
 
         destination = prompt_dir / f"{index:03d}-{slug(prompt.name)}"
         destination.write_text(rendered, encoding="utf-8")
-        copied_prompts.append(
-            {
-                "source": str(prompt),
-                "source_sha256": sha256(prompt),
-                "mounted_name": destination.name,
-                "sha256": sha256(destination),
-                "bytes": destination.stat().st_size,
-                "substitutions": substitutions,
-                "prior_stage_result": previous_result,
-            }
-        )
+        copied_prompt = {
+            "source": str(prompt),
+            "source_sha256": sha256(prompt),
+            "mounted_name": destination.name,
+            "sha256": sha256(destination),
+            "bytes": destination.stat().st_size,
+            "substitutions": substitutions,
+            "prior_stage_result": previous_result,
+        }
+        if prompt_input["original_source"] is not None:
+            copied_prompt["original_source"] = prompt_input["original_source"]
+        copied_prompts.append(copied_prompt)
 
     manifest_path = run_root / "manifest.json"
     console_log = state / "console.log"
@@ -367,6 +546,8 @@ def main() -> int:
         "schema": 1,
         "run_id": run_id,
         "name": args.name,
+        "replay_of": str(replay_manifest_path) if replay_manifest_path else None,
+        "replay_run_id": replay["manifest"].get("run_id") if replay else None,
         "created_at": timestamp(),
         "status": "preparing",
         "image": args.image,
