@@ -1,1 +1,1 @@
-Can you now markup as many function names and variables names as possible throughout the database?
+Mark up as many function names and variables names as possible throughout the database.

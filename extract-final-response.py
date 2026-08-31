@@ -232,11 +232,56 @@ def write_atomic(path: Path, text: str) -> None:
     os.replace(temporary, path)
 
 
+def path_lexists(path: Path) -> bool:
+    """Return true for every directory entry, including dangling symlinks."""
+    return os.path.lexists(path)
+
+
+def default_collision_output(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.runner-response{path.suffix}")
+
+
+def save_final_response(
+    output: Path,
+    text: str,
+    preserve_existing: bool = False,
+    collision_output: Path | None = None,
+) -> tuple[Path, bool]:
+    """Save final text without destroying an artifact created during the session."""
+    if not preserve_existing or not path_lexists(output):
+        write_atomic(output, text)
+        return output, False
+
+    alternate = collision_output or default_collision_output(output)
+    if alternate == output:
+        raise ValueError("collision output must differ from the primary output")
+    if path_lexists(alternate):
+        raise ValueError(
+            f"refusing to overwrite both existing output {output} and "
+            f"collision output {alternate}"
+        )
+    write_atomic(alternate, text)
+    return alternate, True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", type=Path, help="Pi JSONL file or session directory")
     parser.add_argument("--session-name", help="session name when source is a directory")
     parser.add_argument("-o", "--output", type=Path, help="Markdown output path")
+    parser.add_argument(
+        "--preserve-existing",
+        action="store_true",
+        help=(
+            "leave an existing output untouched and save the final response to "
+            "<stem>.runner-response<suffix> instead"
+        ),
+    )
+    parser.add_argument(
+        "--collision-output",
+        type=Path,
+        help="alternate final-response path used when --preserve-existing finds a collision",
+    )
     parser.add_argument(
         "--usage-report",
         action="store_true",
@@ -254,9 +299,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.collision_output and not args.preserve_existing:
+        parser.error("--collision-output requires --preserve-existing")
+
     if args.usage_report:
         if args.output:
             parser.error("--output cannot be used with --usage-report")
+        if args.preserve_existing or args.collision_output:
+            parser.error("collision options cannot be used with --usage-report")
         if args.source.is_file() or args.session_name:
             sessions = [select_session(args.source, args.session_name)]
         elif args.source.is_dir():
@@ -270,8 +320,19 @@ def main() -> int:
     if args.validate_execution:
         validate_execution(session)
     output = args.output or session.with_suffix(".md")
-    write_atomic(output, extract_final_response(session))
-    print(f"saved final response from {session} to {output}")
+    saved_path, collided = save_final_response(
+        output,
+        extract_final_response(session),
+        preserve_existing=args.preserve_existing,
+        collision_output=args.collision_output,
+    )
+    if collided:
+        print(
+            f"preserved session-created output at {output}; "
+            f"saved final response from {session} to {saved_path}"
+        )
+    else:
+        print(f"saved final response from {session} to {saved_path}")
 
     if args.export_html:
         export_path = session.with_suffix(".html")

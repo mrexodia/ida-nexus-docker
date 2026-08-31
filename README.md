@@ -121,9 +121,13 @@ stage execution. Prompts run in the order supplied and
 each receives a separate Pi session. They communicate through the persistent
 workspace and IDB rather than an ever-growing model transcript. After each
 prompt, the harness extracts its final textual assistant response to
-`workspace/01-result.md`, `workspace/02-result.md`, and so on. At the end of the
-console output it prints each session's total reported cost and input, output,
-and cache token usage, followed by aggregate cost and token totals for the run.
+`workspace/01-result.md`, `workspace/02-result.md`, and so on. If a stage has
+already created its corresponding result path, extraction never overwrites it:
+the session-created file remains the stage handoff and the final textual
+response is saved beside it as
+`NN-result.runner-response.md`. At the end of the console output it prints each
+session's total reported cost and input, output, and cache token usage, followed
+by aggregate cost and token totals for the run.
 
 By default, each stage after the first is told to read only the immediately
 preceding `result.md` as untrusted prior-stage notes and to verify its important
@@ -189,8 +193,9 @@ they map to provider values.
 runs/<timestamp>-<name>-<id>/
   manifest.json
   workspace/                  copied samples + analysis outputs/IDBs
-    01-result.md              final response from the first prompt
-    02-result.md              final response from the second prompt
+    01-result.md              first-stage response (or session-created handoff)
+    02-result.md              second-stage response (or session-created handoff)
+    02-result.runner-response.md  final response if stage 2 collided (optional)
   prompts/                    rendered copies of submitted prompt templates
   state/
     console.log
