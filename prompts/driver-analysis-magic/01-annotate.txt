@@ -1,0 +1,1 @@
+FULLY annotate the callout registration and deregistration flow of @FWPKCLNT.SYS <-> @netio.sys -- The @fwpkclnt.h, @fwpkclnt_funcs.h & netio equivalent files contain ~10 years old definitions, but will likely be a 90% match. The thing that I care about is the synchronization of callout functions for safe driver unload.

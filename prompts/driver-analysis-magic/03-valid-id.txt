@@ -1,0 +1,1 @@
+Can a valid calloutId be 0 or UINT32_MAX?

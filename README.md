@@ -106,11 +106,14 @@ For an interactive, dependency-free launcher, run:
 python wizard.py
 ```
 
-The wizard scans `samples/` and `prompts/` recursively, supports ordered
-multi-selection with entries such as `1,3-5`, enumerates providers and models
-from `.pi/models.json`, and lets you select the thinking level and execution
-options. It uses only the Python standard library and works with ordinary
-Windows, macOS, and Linux terminals.
+The wizard lists the top-level entries in `samples/` and `prompts/`, supports
+ordered multi-selection with entries such as `1,3-5`, and presents each
+non-empty top-level folder as a pack. Selecting a pack adds the visible files
+directly inside that folder in sorted filename order; nested directories are
+not scanned. The wizard also enumerates providers and models from
+`.pi/models.json` and lets you select the thinking level and execution options.
+It uses only the Python standard library and works with ordinary Windows,
+macOS, and Linux terminals.
 
 `--sample` and `--prompt` are repeatable. Their order is significant: sample
 order controls `{SAMPLE1}`, `{SAMPLE2}`, and so on, while prompt order controls

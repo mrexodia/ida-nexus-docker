@@ -39,11 +39,48 @@ def list_files(directory: Path) -> list[Path]:
     return sorted(
         (
             path
-            for path in directory.rglob("*")
-            if path.is_file() and not any(part.startswith(".") for part in path.relative_to(directory).parts)
+            for path in directory.iterdir()
+            if path.is_file() and not path.name.startswith(".")
         ),
-        key=lambda path: path.relative_to(directory).as_posix().casefold(),
+        key=lambda path: path.name.casefold(),
     )
+
+
+def pack_choices(directory: Path) -> list[tuple[str, list[Path]]]:
+    """Return top-level files and folders whose immediate files form packs."""
+    files = list_files(directory)
+    packs = [
+        (path, list_files(path))
+        for path in directory.iterdir()
+        if path.is_dir() and not path.name.startswith(".")
+    ]
+    packs = [(path, members) for path, members in packs if members]
+
+    choices: list[tuple[str, list[Path]]] = [
+        (relative(path), [path]) for path in files
+    ]
+    choices.extend(
+        (f"{relative(path)}/ [pack: {len(members)} files]", members)
+        for path, members in packs
+    )
+    return sorted(
+        choices,
+        key=lambda choice: choice[0].casefold(),
+    )
+
+
+def expand_choices(
+    choices: list[tuple[str, list[Path]]], selected_indexes: list[int]
+) -> list[Path]:
+    """Expand selected packs in selection order, keeping each file only once."""
+    selected: list[Path] = []
+    seen: set[Path] = set()
+    for index in selected_indexes:
+        for path in choices[index][1]:
+            if path not in seen:
+                selected.append(path)
+                seen.add(path)
+    return selected
 
 
 def parse_indexes(value: str, count: int) -> list[int]:
@@ -164,16 +201,22 @@ def model_thinking_levels(model: dict[str, Any]) -> list[str]:
 
 
 def build_new_command() -> list[str]:
-    samples = list_files(SAMPLES_DIR)
-    prompts = list_files(PROMPTS_DIR)
+    sample_choices = pack_choices(SAMPLES_DIR)
+    prompt_choices = pack_choices(PROMPTS_DIR)
     models = enumerate_models()
 
     sample_indexes = choose_many(
-        "Select samples", [relative(path) for path in samples], order_matters=True
+        "Select samples or sample packs",
+        [label for label, _ in sample_choices],
+        order_matters=True,
     )
+    samples = expand_choices(sample_choices, sample_indexes)
     prompt_indexes = choose_many(
-        "Select prompts", [relative(path) for path in prompts], order_matters=True
+        "Select prompts or prompt packs",
+        [label for label, _ in prompt_choices],
+        order_matters=True,
     )
+    prompts = expand_choices(prompt_choices, prompt_indexes)
     model_index = choose_one(
         "Select model",
         [
@@ -186,17 +229,17 @@ def build_new_command() -> list[str]:
     levels = model_thinking_levels(model)
     thinking = levels[choose_one("Select thinking level", levels)]
 
-    default_name = samples[sample_indexes[0]].stem[:48] or "analysis"
+    default_name = samples[0].stem[:48] or "analysis"
     name = ask_text("Run name", default_name)
     inject_prior = ask_yes_no("Inject prior-stage handoff", True)
     reliable = ask_yes_no("Enable reliable execution checks", False)
     build = ask_yes_no("Build the Docker image first", False)
 
     command = [sys.executable, str(PROJECT_ROOT / "analyze.py"), "--name", name]
-    for index in sample_indexes:
-        command.extend(["--sample", relative(samples[index])])
-    for index in prompt_indexes:
-        command.extend(["--prompt", relative(prompts[index])])
+    for sample in samples:
+        command.extend(["--sample", relative(sample)])
+    for prompt in prompts:
+        command.extend(["--prompt", relative(prompt)])
     command.extend(
         [
             "--models",
