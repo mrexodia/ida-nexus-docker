@@ -1,11 +1,14 @@
 .git
 .gitignore
 runs
+sites
 models*.json
 !models.example.json
 .pi
 .pi-sessions
 .ida-nexus
+.pagecast
+**/.pagecast
 __pycache__
 *.pyc
 *.exe
@@ -21,3 +24,11 @@ __pycache__
 *.zip
 *.log
 *.prom
+.venv
+**/.venv
+*.egg-info
+**/*.egg-info
+build
+dist
+.pytest_cache
+.ruff_cache

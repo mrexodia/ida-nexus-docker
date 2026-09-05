@@ -1,4 +1,4 @@
-# IDA Nexus Docker runner
+# ida-nexus-docker
 
 A small, disposable analysis harness for IDA Pro 9.4, Pi, and
 [IDA Nexus](https://github.com/HexRaysSA/ida-nexus). Each invocation copies
@@ -8,6 +8,26 @@ trail.
 
 The image contains tools only. Samples, prompts, model settings, and credentials
 are never baked into it.
+
+## Python project setup
+
+Use Python 3.11+ and run commands from the repository root:
+
+```bash
+uv sync
+uv run ida-run-export --help
+```
+
+The installable package lives in `src/run_site/`, with `pyproject.toml` and
+`uv.lock` at the root. Tests live in `tests/`; run them with `uv run pytest`.
+The existing `analyze.py`, `wizard.py`, and `extract-final-response.py` scripts
+remain at the root and still work with `python`. They can also use the project
+environment, for example `uv run python analyze.py --help` or
+`uv run python wizard.py`.
+
+Without uv, install with `python -m pip install -e .` (or `-e '.[test]'` for tests).
+IDA database export requires a licensed IDA 9.4 installation configured for
+idalib. The launcher scripts themselves remain dependency-free.
 
 ## Configure Pi
 
@@ -220,6 +240,32 @@ the container skips final-response extraction, stops subsequent stages, and
 still attempts to archive all partial logs. A partial archive may contain no
 linked Pi transcript; the launcher records its available contents without
 replacing the original container failure with an archive-validation error.
+
+## Share a run as a static website
+
+The [`run_site` package](docs/run-site.md) exports a retained
+run as a static website suitable for GitHub Pages:
+
+```bash
+uv run ida-run-export runs/<run-id>
+python -m http.server 8000 --directory sites
+```
+
+It includes Pi's native HTML logs, rendered Markdown and highlighted source
+artifacts, and an interactive IDA browser backed by chunked static JSON with
+functions, linear disassembly, decompilation, xrefs and local types. Sample
+links open the matching database. Exporting databases requires licensed
+idalib/IDA Domain; viewing or hosting the output requires only a static server.
+Missing Pi HTML is generated with `pi --export`.
+The run header and each stage show token usage, costs by type, and elapsed time.
+
+Converted runs live in `sites/<run-id>/`, with a searchable library at
+`http://localhost:8000`. Use `--overwrite` to rebuild a converted run.
+
+For Cloudflare Pages, run `npx pagecast pages setup --project my-analysis-runs`
+once, then add `--publish` to the export command. See the
+[Pagecast setup and publishing guide](docs/run-site.md#cloudflare-pages-through-pagecast)
+for the walkthrough and direct npx commands.
 
 ## Isolation model
 

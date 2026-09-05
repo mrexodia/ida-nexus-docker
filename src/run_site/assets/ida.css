@@ -1,0 +1,63 @@
+/* Database pages behave as a desktop workspace: only data panes scroll. */
+.ida-page { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+.ida-page .site-header { flex: none; height: 30px; padding: 0 12px; gap: 18px; font-size: .7rem; }
+.ida-page > main.wide { flex: 1; min-height: 0; padding: 0; display: flex; }
+#ida-app { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.ida-page button { padding: 3px 9px; font-size: .75rem; border-radius: 3px; }
+.ida-page input { padding: 4px 8px; font-size: .78rem; }
+.ida-page .ida-heading { flex: none; display: flex; flex-direction: row; align-items: center; gap: 6px; padding: 5px 10px; border-bottom: 1px solid var(--line); }
+.ida-page .ida-heading h1 { flex: 1; min-width: 0; max-width: none; margin: 0 8px; font-size: .85rem; line-height: 1.5; letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ida-page .ida-heading form { flex: 0 1 320px; min-width: 150px; margin: 0; }
+.ida-page .input-row { gap: 4px; }
+.ida-page .ida-layout { flex: 1; min-height: 0; grid-template-columns: 235px minmax(0, 1fr); display: grid; border: 0; border-radius: 0; }
+.ida-page .ida-sidebar { min-height: 0; max-height: none; position: static; display: flex; flex-direction: column; overflow: hidden; padding: 8px; }
+.ida-page .tab-row { flex: none; margin: 0; gap: 5px; flex-wrap: nowrap; }
+.ida-page .ida-sidebar .tab-row { margin-bottom: 7px; }
+.ida-page .tab-row button { padding: 4px 9px; font-size: .75rem; white-space: nowrap; }
+.ida-page #item-count { flex: none; padding: 4px 2px; font-size: .7rem; }
+.ida-page #item-list { flex: 1; min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain; }
+.ida-page .symbol { padding: 4px 3px; gap: 8px; flex-direction: row; align-items: baseline; font-size: .74rem; }
+.ida-page .symbol span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ida-page .symbol small { margin: 0; flex: none; }
+.ida-page .symbol[aria-current] { background: #253c34; }
+.ida-page .ida-sidebar details { flex: none; margin-top: 6px; max-height: 25%; overflow: auto; }
+.ida-page #entry-points a { display: block; padding: 6px 0; font: .75rem Consolas, monospace; overflow-wrap: anywhere; }
+.ida-page .ida-main { padding: 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ida-page .ida-main > .tab-row { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+.ida-page #selection { flex: none; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 5px 10px; border-bottom: 1px solid var(--line); max-height: 25%; overflow: auto; }
+.ida-page #selection:empty { display: none; }
+.ida-page #selection h2 { min-width: 0; margin: 0; font-size: .85rem; line-height: 1.5; }
+.ida-page .selection-meta { display: flex; gap: 12px; margin: 0; font-size: .72rem; }
+.ida-page .function-details { font-size: .75rem; }
+.ida-page .function-details[open] { width: 100%; }
+.ida-page .function-details summary { cursor: pointer; color: var(--muted); }
+.ida-page .function-details .signature { margin: 6px 0; font-size: .78rem; }
+.ida-page .function-details p { margin: 5px 0; }
+.ida-page #ida-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; display: flex; flex-direction: column; overscroll-behavior: contain; }
+.ida-page #ida-content > p { margin: 12px; }
+.ida-page .listing-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ida-page .listing { flex: 1; min-height: 0; max-height: none; border: 0; border-radius: 0; line-height: 1.5; overscroll-behavior: contain; }
+.ida-page .assembly-row { grid-template-columns: 132px 150px minmax(300px, 1fr) 65px; gap: 8px; padding: 1px 8px; }
+.ida-page .bytes { max-width: 150px; }
+.ida-page .listing-pager { flex: none; padding: 3px 10px; margin: 0; border-bottom: 1px solid var(--line); font-size: .7rem; }
+.ida-page .pseudocode { flex: 1; min-height: 0; max-height: none; margin: 0; padding: 10px 14px; border: 0; border-radius: 0; line-height: 1.6; background: #13181c; overscroll-behavior: contain; }
+.ida-page .references { padding: 0 12px 10px; }
+.ida-page #ida-status { flex: none; margin: 0; padding: 2px 10px; border-top: 1px solid var(--line); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ida-page #ida-warning { flex: none; max-height: 60px; overflow: auto; }
+.ida-page #ida-warning .warning { margin: 0; padding: 3px 10px; border-radius: 0; font-size: .72rem; }
+#ida-app[data-sidebar="closed"] .ida-sidebar { display: none; }
+#ida-app[data-sidebar="closed"] .ida-layout { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 850px) {
+  .ida-page .ida-layout { grid-template-columns: 200px minmax(0, 1fr); }
+  .ida-page .assembly-row { grid-template-columns: 132px minmax(300px, 1fr) 65px; }
+  .ida-page .bytes { display: none; }
+}
+@media (max-width: 600px) {
+  .ida-page .ida-heading { flex-wrap: wrap; padding: 4px 6px; }
+  .ida-page .ida-heading form { flex: 1 0 100%; }
+  .ida-page .ida-layout { position: relative; grid-template-columns: minmax(0, 1fr); }
+  .ida-page .ida-sidebar { position: absolute; inset: 0 auto 0 0; width: min(280px, 85%); z-index: 2; border-right: 1px solid var(--line); box-shadow: 10px 0 20px #0006; }
+  .ida-page .ida-sidebar details { display: block; }
+  .ida-page #selection { gap: 3px 10px; }
+  .ida-page .function-details { display: none; }
+}

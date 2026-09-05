@@ -1,9 +1,11 @@
 runs/
+sites/
 models*.json
 !models.example.json
 .pi/auth.json
 .pi-sessions/
 .ida-nexus/
+.pagecast/
 __pycache__/
 *.pyc
 *.i64
@@ -16,3 +18,9 @@ __pycache__/
 *.bin
 *.dll
 *.sys
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/

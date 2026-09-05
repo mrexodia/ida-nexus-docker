@@ -1,0 +1,12 @@
+/* Keep navigation compact and give the native Pi export the remaining viewport. */
+.log-page { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+.log-page .site-header { flex: none; height: 30px; padding: 0 12px; gap: 18px; font-size: .7rem; }
+.log-page > main.wide { flex: 1; min-height: 0; min-width: 0; padding: 0; display: flex; flex-direction: column; }
+.log-page .log-heading { flex: none; min-width: 0; align-items: center; gap: 16px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.log-page .log-heading h1 { flex: 1; min-width: 0; margin: 0; font-size: .85rem; line-height: 1.5; letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.log-page .log-heading a { flex: none; font-size: .75rem; white-space: nowrap; }
+.log-page .pi-log { display: block; flex: 1; min-height: 0; height: 0; width: 100%; border: 0; border-radius: 0; }
+@media (max-width: 600px) {
+  .log-page .log-heading { gap: 10px; padding: 7px 8px; }
+  .log-page .log-heading h1 { font-size: .8rem; }
+}
